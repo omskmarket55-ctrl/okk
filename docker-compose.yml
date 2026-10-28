@@ -1,0 +1,50 @@
+# Запуск на сервере: deploy/install.sh (или вручную: docker compose up -d --build).
+# HTTPS — на общем входном Caddy сервера: он ходит в приложение по сети «unosystem» на okk-app:3000.
+# База данных — только во внутренней сети проекта, наружу не открыта.
+name: okk
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: okk
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
+      POSTGRES_DB: okk
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Экономный режим: сервер делят несколько проектов
+    command: postgres -c shared_buffers=256MB -c effective_cache_size=768MB -c max_connections=30
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U okk"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://okk:${POSTGRES_PASSWORD}@db:5432/okk
+      PORT: 3000
+      TZ: Europe/Moscow
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 768m
+    networks:
+      default:
+      unosystem:
+        aliases: [okk-app]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health > /dev/null || exit 1"]
+      interval: 15s
+      retries: 3
+      start_period: 20s
+
+networks:
+  unosystem:
+    external: true
+
+volumes:
+  pgdata:
