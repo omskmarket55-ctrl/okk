@@ -18,6 +18,7 @@ import { surveyRoutes } from './routes/surveys.js';
 import { adminRoutes } from './routes/admin.js';
 import { reportRoutes } from './routes/reports.js';
 import { hookRoutes } from './routes/hooks.js';
+import { okcRoutes } from './routes/okc.js';
 import { WEB_DIST, webRoutes } from './routes/web.js';
 
 export interface AppContext {
@@ -86,5 +87,6 @@ export async function buildApp(config: Config, db: Db, deps: AppDeps = {}) {
   await adminRoutes(app, ctx);
   await reportRoutes(app, ctx);
   await hookRoutes(app, ctx);
+  await okcRoutes(app, ctx);
   return { app, ctx };
 }

@@ -4,6 +4,9 @@ import type { BitrixClient } from '../bitrix/client.js';
 import type { DealDirectory } from '../bitrix/deals.js';
 import { syncActivities } from '../bitrix/sync.js';
 import { returnDueCallbacks } from '../cards/service.js';
+import { getSetting } from '../db/settings.js';
+import { autoRelease } from '../okc/service.js';
+import { syncMeetingStages } from '../okc/bitrix.js';
 
 const SYNC_EVERY_MS = 5 * 60_000;
 const CALLBACKS_EVERY_MS = 60_000;
@@ -24,6 +27,7 @@ export class Scheduler {
   start() {
     this.timers.push(setInterval(() => void this.callbacks(), CALLBACKS_EVERY_MS));
     this.timers.push(setInterval(() => void this.syncNow(), SYNC_EVERY_MS));
+    this.timers.push(setInterval(() => void this.okc(), SYNC_EVERY_MS));
     void this.callbacks();
     setTimeout(() => void this.syncNow(), 10_000);
   }
@@ -31,11 +35,31 @@ export class Scheduler {
   stop() {
     this.timers.forEach(clearInterval);
     if (this.debounce) clearTimeout(this.debounce);
+    if (this.okcDebounce) clearTimeout(this.okcDebounce);
   }
 
   triggerSync() {
     if (this.debounce) clearTimeout(this.debounce);
     this.debounce = setTimeout(() => void this.syncNow(), DEBOUNCE_MS);
+  }
+
+  private okcDebounce: NodeJS.Timeout | null = null;
+
+  /** ОКЦ: открепление карточек и проверка стадий сделок со встречами */
+  async okc() {
+    try {
+      const n = await autoRelease(this.db, await getSetting(this.db, 'okc'));
+      if (n) this.log.info(`ОКЦ: откреплено карточек: ${n}`);
+      const r = await syncMeetingStages(this.db, this.bx, this.log);
+      if (r.done || r.failed) this.log.info(`ОКЦ: встреч состоялось ${r.done}, не состоялось ${r.failed}`);
+    } catch (err) {
+      this.log.error({ err }, 'Ошибка задач ОКЦ');
+    }
+  }
+
+  triggerOkcSync() {
+    if (this.okcDebounce) clearTimeout(this.okcDebounce);
+    this.okcDebounce = setTimeout(() => void this.okc(), DEBOUNCE_MS);
   }
 
   /** Одна синхронизация за раз: повторный вызов ждёт текущую. */

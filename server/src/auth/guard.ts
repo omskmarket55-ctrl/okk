@@ -1,6 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Db } from '../db/pool.js';
-import { findUserById, toCurrentUser, type CurrentUser } from '../db/users.js';
+import { findUserById, toCurrentUser, touchSeen, type CurrentUser } from '../db/users.js';
 import type { Permission } from './permissions.js';
 import { SESSION_COOKIE, verifySession } from './session.js';
 
@@ -24,6 +24,7 @@ export async function currentUser(req: FastifyRequest, db: Db, secret: string): 
   const row = await findUserById(db, s.userId);
   if (!row || !row.active || row.session_version !== s.ver) return null;
   req.user = toCurrentUser(row);
+  void touchSeen(db, row.id).catch(() => undefined);
   return req.user;
 }
 

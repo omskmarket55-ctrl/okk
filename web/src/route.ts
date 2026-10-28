@@ -11,7 +11,15 @@ export type Route =
   | { page: 'users' }
   | { page: 'roles' }
   | { page: 'settings' }
-  | { page: 'audit' };
+  | { page: 'audit' }
+  | { page: 'okc' }
+  | { page: 'okcCard'; id: number }
+  | { page: 'okcMy' }
+  | { page: 'bonus' }
+  | { page: 'okcStats' }
+  | { page: 'okcBase' }
+  | { page: 'okcOperators' }
+  | { page: 'payouts' };
 
 export function parseRoute(hash: string): Route | null {
   const [a, b] = hash.replace(/^#\/?/, '').split('/');
@@ -25,6 +33,13 @@ export function parseRoute(hash: string): Route | null {
     case 'roles': return { page: 'roles' };
     case 'settings': return { page: 'settings' };
     case 'audit': return { page: 'audit' };
+    case 'okc': return n ? { page: 'okcCard', id: n } : { page: 'okc' };
+    case 'okc-my': return { page: 'okcMy' };
+    case 'bonus': return { page: 'bonus' };
+    case 'okc-stats': return { page: 'okcStats' };
+    case 'okc-base': return { page: 'okcBase' };
+    case 'okc-operators': return { page: 'okcOperators' };
+    case 'payouts': return { page: 'payouts' };
     default: return null;
   }
 }
@@ -34,6 +49,11 @@ export function href(r: Route): string {
     case 'work': return r.cardId ? `#/work/${r.cardId}` : '#/work';
     case 'client': return `#/clients/${r.id}`;
     case 'survey': return `#/surveys/${r.id}`;
+    case 'okcCard': return `#/okc/${r.id}`;
+    case 'okcMy': return '#/okc-my';
+    case 'okcStats': return '#/okc-stats';
+    case 'okcBase': return '#/okc-base';
+    case 'okcOperators': return '#/okc-operators';
     default: return `#/${r.page}`;
   }
 }

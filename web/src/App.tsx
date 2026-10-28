@@ -13,10 +13,25 @@ import { UsersPage } from './pages/UsersPage';
 import { RolesPage } from './pages/RolesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AuditPage } from './pages/AuditPage';
+import { OkcWorkPage } from './pages/OkcWorkPage';
+import { OkcCardPage } from './pages/OkcCardPage';
+import { OkcMyPage } from './pages/OkcMyPage';
+import { BonusPage } from './pages/BonusPage';
+import { OkcStatsPage } from './pages/OkcStatsPage';
+import { OkcBasePage } from './pages/OkcBasePage';
+import { OkcOperatorsPage } from './pages/OkcOperatorsPage';
+import { PayoutsPage } from './pages/PayoutsPage';
 
 /** Пункты меню и права, с которыми они видны */
-const NAV: { route: Route; label: string; any: string[]; sep?: boolean }[] = [
-  { route: { page: 'work' }, label: 'Рабочий стол', any: ['queue.work'] },
+const NAV: { route: Route; label: string; any: string[]; sep?: boolean; group?: string }[] = [
+  { route: { page: 'okc' }, label: 'Обзвон', any: ['okc.work'], group: 'ОКЦ' },
+  { route: { page: 'okcMy' }, label: 'Мои карточки', any: ['okc.work'] },
+  { route: { page: 'okcStats' }, label: 'Статистика ОКЦ', any: ['okc.work', 'okc.stats.all'] },
+  { route: { page: 'bonus' }, label: 'Мой бонус', any: ['okc.work'] },
+  { route: { page: 'okcBase' }, label: 'База обзвона', any: ['okc.base'] },
+  { route: { page: 'okcOperators' }, label: 'Операторы ОКЦ', any: ['okc.stats.all', 'okc.reassign'] },
+  { route: { page: 'payouts' }, label: 'Выплаты бонусов', any: ['okc.payouts'] },
+  { route: { page: 'work' }, label: 'Рабочий стол', any: ['queue.work'], group: 'ОКК', sep: true },
   { route: { page: 'dashboard' }, label: 'Дашборд', any: ['reports.all', 'reports.own'] },
   { route: { page: 'clients' }, label: 'Клиенты и анкеты', any: ['responses.all', 'responses.own'] },
   { route: { page: 'surveys' }, label: 'Конструктор анкет', any: ['surveys.view', 'surveys.edit'], sep: true },
@@ -43,7 +58,8 @@ export function App() {
 
   const can = (...p: string[]) => p.some((x) => me.permissions.includes(x));
   const items = NAV.filter((n) => can(...n.any));
-  const allowed = route && items.some((n) => n.route.page === route.page || (route.page === 'client' && n.route.page === 'clients') || (route.page === 'survey' && n.route.page === 'surveys'));
+  const parentOf: Partial<Record<Route['page'], Route['page']>> = { client: 'clients', survey: 'surveys', okcCard: can('okc.base') ? 'okcBase' : 'okcMy' };
+  const allowed = route && items.some((n) => n.route.page === route.page || parentOf[route.page] === n.route.page);
   if (!allowed && items[0]) {
     setTimeout(() => go(items[0].route));
     return null;
@@ -54,7 +70,9 @@ export function App() {
     setMe(null);
   };
 
-  const active = route?.page === 'client' ? 'clients' : route?.page === 'survey' ? 'surveys' : route?.page;
+  const active = (route && parentOf[route.page]) ?? route?.page;
+  // Первая группа меню без разделителя, у остальных — разделитель и подпись группы
+  const groups = items.filter((n) => n.group).map((n) => n.route.page);
   return (
     <ToastProvider>
       <div className="shell">
@@ -63,8 +81,11 @@ export function App() {
           <nav className="nav" aria-label="Разделы">
             {items.map((n) => (
               <div key={n.route.page}>
-                {n.sep && <div className="sep" />}
-                <a href={href(n.route)} aria-current={active === n.route.page ? 'page' : undefined}>{n.label}</a>
+                {n.sep && groups[0] !== n.route.page && <div className="sep" />}
+                {n.group && groups.length > 1 && <div className="label" style={{ padding: '6px 10px 2px' }}>{n.group}</div>}
+                <a href={href(n.route)} aria-current={active === n.route.page ? 'page' : undefined}>
+                  {n.label}{n.route.page === 'payouts' && me.pendingPayouts > 0 && <span className="pill warn" style={{ marginLeft: 6 }}>{me.pendingPayouts}</span>}
+                </a>
               </div>
             ))}
           </nav>
@@ -86,6 +107,14 @@ export function App() {
           {route?.page === 'roles' && <RolesPage />}
           {route?.page === 'settings' && <SettingsPage />}
           {route?.page === 'audit' && <AuditPage />}
+          {route?.page === 'okc' && <OkcWorkPage me={me} />}
+          {route?.page === 'okcCard' && <OkcCardPage me={me} id={route.id} />}
+          {route?.page === 'okcMy' && <OkcMyPage />}
+          {route?.page === 'bonus' && <BonusPage />}
+          {route?.page === 'okcStats' && <OkcStatsPage me={me} />}
+          {route?.page === 'okcBase' && <OkcBasePage me={me} />}
+          {route?.page === 'okcOperators' && <OkcOperatorsPage me={me} />}
+          {route?.page === 'payouts' && <PayoutsPage onChanged={loadMe} />}
         </main>
       </div>
     </ToastProvider>

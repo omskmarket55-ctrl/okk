@@ -191,3 +191,5 @@ tr.click:hover td { background: var(--surface-2); }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+a.pill { text-decoration: none; }
+a.pill:hover { border-color: var(--muted); }

@@ -74,3 +74,11 @@ export async function seedUsers(db: Db, admin: { login: string; password: string
 export async function audit(db: Db, userId: number | null, action: string, target: string | null, data: object = {}, ip?: string) {
   await db.query('INSERT INTO audit_log (user_id, action, target, data, ip) VALUES ($1, $2, $3, $4, $5)', [userId, action, target, data, ip ?? null]);
 }
+
+const seen = new Map<number, number>();
+/** Отметка «был в кабинете» — не чаще раза в минуту на сотрудника. */
+export async function touchSeen(db: Db, userId: number, now = Date.now()) {
+  if ((seen.get(userId) ?? 0) > now - 60_000) return;
+  seen.set(userId, now);
+  await db.query('UPDATE users SET last_seen_at = now() WHERE id = $1', [userId]);
+}

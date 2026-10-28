@@ -57,12 +57,16 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext) {
     const user = await currentUser(req, db, config.sessionSecret);
     if (!user) return reply.code(401).send({ error: 'unauthorized' });
     const sms = await getSetting(db, 'sms');
+    const pendingPayouts = user.permissions.has('okc.payouts')
+      ? Number((await db.query<{ n: string }>("SELECT count(*) AS n FROM okc_withdrawals WHERE status = 'pending'")).rows[0].n)
+      : 0;
     return {
       id: user.id,
       login: user.login,
       name: user.name,
       roleName: user.roleName,
       permissions: ALL_PERMISSIONS.filter((p) => user.permissions.has(p)),
+      pendingPayouts,
       integrations: {
         bitrix: ctx.bx.configured,
         uis: ctx.uis.configured && Boolean(user.uisEmployeeId),
