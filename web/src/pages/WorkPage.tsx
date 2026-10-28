@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, errorText, type Me } from '../api';
 import { go } from '../route';
 import { chosenAction, type Answers } from '../../../server/src/surveys/schema';
 import { Loading, useLoad, useToast } from '../components/ui';
 import { SurveyForm } from '../components/SurveyForm';
 import { CallbackDialog, SmsDialog } from '../components/Dialogs';
-import { eventText, fmtDateTime, fmtSeconds } from '../format';
-import { CALL_STATUS, type CardView, type QueueItem } from '../types';
+import { eventText, fmtDateTime } from '../format';
+import { CallBar } from '../components/CallBar';
+import type { CardView, QueueItem } from '../types';
 
 export function WorkPage({ me, cardId }: { me: Me; cardId?: number }) {
   const toast = useToast();
@@ -127,7 +128,7 @@ function CardWork({ me, card, onDone, reload }: { me: Me; card: CardView; onDone
             <dl className="fields">
               {card.fields.map((f) => <div key={f.code}><dt>{f.label}</dt><dd>{f.value}</dd></div>)}
             </dl>
-            <CallBar me={me} card={card} onChange={reload} />
+            <CallBar uis={me.integrations.uis} hasPhone={card.hasPhone} phone={card.phone} startUrl={`/api/cards/${card.id}/call`} callsUrl="/api/calls" onChange={reload} />
           </div>
         </section>
 
@@ -175,63 +176,5 @@ function CardWork({ me, card, onDone, reload }: { me: Me; card: CardView; onDone
         <SmsDialog cardId={card.id} clientName={card.clientName} providers={me.integrations.sms} onClose={() => setDialog(null)} onSent={() => { setDialog(null); toast('СМС отправлено'); reload(); }} />
       )}
     </>
-  );
-}
-
-/** Звонок через UIS: браузер передаёт только номер карточки, номер клиента подставляет сервер. */
-function CallBar({ me, card, onChange }: { me: Me; card: CardView; onChange: () => void }) {
-  const toast = useToast();
-  const [call, setCall] = useState<{ id: number; status: string; talkSeconds: number | null } | null>(null);
-  const [seconds, setSeconds] = useState(0);
-  const poll = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => () => { if (poll.current) clearInterval(poll.current); }, []);
-  useEffect(() => {
-    if (call?.status !== 'talk') return;
-    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => clearInterval(t);
-  }, [call?.status]);
-
-  const start = async () => {
-    try {
-      const r = await api<{ callId: number; status: string }>(`/api/cards/${card.id}/call`, { body: {} });
-      setCall({ id: r.callId, status: r.status, talkSeconds: null });
-      setSeconds(0);
-      poll.current = setInterval(async () => {
-        const c = await api<{ id: number; status: string; talkSeconds: number | null }>(`/api/calls/${r.callId}`).catch(() => null);
-        if (!c) return;
-        setCall(c);
-        if (['ended', 'missed', 'error'].includes(c.status) && poll.current) {
-          clearInterval(poll.current);
-          onChange();
-        }
-      }, 3000);
-    } catch (e) {
-      toast(errorText(e), true);
-    }
-  };
-  const hangup = async () => {
-    if (!call) return;
-    await api(`/api/calls/${call.id}/hangup`, { body: {} }).catch(() => undefined);
-    if (poll.current) clearInterval(poll.current);
-    setCall({ ...call, status: 'ended' });
-    onChange();
-  };
-
-  const active = call && ['starting', 'ringing', 'talk'].includes(call.status);
-  return (
-    <div className="phone">
-      <div>
-        <div className="label">Телефон клиента</div>
-        <div className="numtxt mono">{card.hasPhone ? card.phone : 'нет в Битрикс24'}</div>
-      </div>
-      <div className="row" style={{ marginLeft: 'auto' }}>
-        {call && <span className={`pill ${call.status === 'talk' ? 'good' : call.status === 'error' || call.status === 'missed' ? 'bad' : 'warn'}`}>{CALL_STATUS[call.status] ?? call.status}</span>}
-        {call?.status === 'talk' && <span className="mono">{fmtSeconds(seconds)}</span>}
-        {active ? <button className="btn danger" onClick={hangup}>Завершить</button>
-          : <button className="btn call" disabled={!card.hasPhone || !me.integrations.uis} onClick={start} title={!me.integrations.uis ? 'Телефония UIS не подключена или в профиле нет ID сотрудника UIS' : undefined}>Позвонить</button>}
-      </div>
-      {!me.integrations.uis && <small className="muted" style={{ flexBasis: '100%' }}>Звонки из браузера заработают после подключения UIS. До этого администратор может временно выдать право «Видеть полный номер клиента».</small>}
-    </div>
   );
 }

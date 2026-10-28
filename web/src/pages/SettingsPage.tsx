@@ -9,6 +9,16 @@ interface Settings {
   lead: { sourceId: string; assignedById: number | null; titleTemplate: string; refDealField: string };
   queue: { callbackLeadMinutes: number };
   uis: { virtualNumber: string };
+  okc: {
+    laterMinutes: number; pinDays: number; releaseLaterDays: number; releaseAgreementDays: number; releaseFailedDays: number; reminderHours: number;
+    bonusOffice: number; bonusDks: number;
+    bitrix: {
+      categoryId: number | null; stageMeeting: string; stagesDone: string[]; stagesFailed: string[]; assignedById: number | null;
+      meetingAtField: string; meetingTypeField: string; regionField: string;
+      calendarOp: { type: string; ownerId: number; sectionId: number | null }; calendarOup: { type: string; ownerId: number; sectionId: number | null };
+      meetingMinutes: number;
+    };
+  };
   sms: { defaultProvider: string | null; providers: Record<string, { enabled: boolean; sender: string; credentials: Record<string, string> } | undefined>; templates: { id: string; name: string; text: string }[]; allowEdit: boolean };
   syncState: { lastActivityId: number; lastRunAt: string | null; lastError: string | null; imported: number };
 }
@@ -44,6 +54,8 @@ export function SettingsPage() {
         <LeadSection data={data} onSaved={reload} />
         <QueueUisSection data={data} onSaved={reload} />
         <SmsSection data={data} onSaved={reload} />
+        <OkcSection data={data} onSaved={reload} />
+        <ReasonsSection />
       </div>
     </>
   );
@@ -300,6 +312,142 @@ function SmsSection({ data, onSaved }: { data: SettingsResponse; onSaved: () => 
         </div>
       ))}
       <button className="btn sm" style={{ justifySelf: 'start' }} onClick={() => setValue({ ...s, templates: [...s.templates, { id: Math.random().toString(36).slice(2, 8), name: 'Партнёрская программа', text: '{имя}, спасибо за разговор! Условия партнёрской программы: ...' }] })}>Добавить шаблон</button>
+    </Section>
+  );
+}
+
+type Cal = Settings['okc']['bitrix']['calendarOp'];
+
+function CalendarPicker({ label, value, onChange, enabled }: { label: string; value: Cal; onChange: (c: Cal) => void; enabled: boolean }) {
+  const sections = useLoad(
+    () => (enabled && (value.type === 'company_calendar' || value.ownerId) ? api<{ items: Opt[] }>(`/api/bitrix/calendar-sections?type=${value.type}&ownerId=${value.ownerId}`).catch(() => ({ items: [] as Opt[] })) : Promise.resolve({ items: [] as Opt[] })),
+    [enabled, value.type, value.ownerId],
+  );
+  return (
+    <fieldset style={{ border: '1px solid var(--line)', borderRadius: 'var(--r)', padding: 12, display: 'grid', gap: 8 }}>
+      <legend style={{ fontWeight: 600, padding: '0 4px' }}>{label}</legend>
+      <div className="grid3">
+        <Field label="Чей календарь">
+          <select value={value.type} onChange={(e) => onChange({ ...value, type: e.target.value, sectionId: null })}>
+            <option value="company_calendar">Календарь компании</option>
+            <option value="group">Календарь группы</option>
+            <option value="user">Календарь сотрудника</option>
+          </select>
+        </Field>
+        <Field label={value.type === 'company_calendar' ? 'Владелец (обычно 0)' : value.type === 'group' ? 'ID группы' : 'ID сотрудника'}>
+          <input className="mono" value={value.ownerId} onChange={(e) => onChange({ ...value, ownerId: Number(e.target.value.replace(/\D/g, '')) || 0, sectionId: null })} />
+        </Field>
+        <Field label="Календарь (раздел)">
+          <select value={value.sectionId ?? ''} onChange={(e) => onChange({ ...value, sectionId: e.target.value ? Number(e.target.value) : null })}>
+            <option value="">— не ставить событие —</option>
+            {!sections.data?.items.some((x) => x.id === value.sectionId) && value.sectionId && <option value={value.sectionId}>#{value.sectionId}</option>}
+            {sections.data?.items.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
+        </Field>
+      </div>
+    </fieldset>
+  );
+}
+
+function OkcSection({ data, onSaved }: { data: SettingsResponse; onSaved: () => void }) {
+  const { value: s, setValue, save, busy } = useSaver('okc', data.settings.okc, onSaved);
+  const on = data.env.bitrix;
+  const b = s.bitrix;
+  const setB = (p: Partial<Settings['okc']['bitrix']>) => setValue({ ...s, bitrix: { ...b, ...p } });
+  const num = (k: keyof Settings['okc'], label: string) => (
+    <Field label={label}><input className="mono" value={String(s[k])} onChange={(e) => setValue({ ...s, [k]: Number(e.target.value.replace(/\D/g, '')) || 0 })} style={{ width: 120 }} /></Field>
+  );
+  const cats = useLoad(list<Opt>('/api/bitrix/categories', on), [on]);
+  const stages = useLoad(list<Opt>(`/api/bitrix/stages?categoryId=${b.categoryId ?? 0}`, on), [on, b.categoryId]);
+  const users = useLoad(list<Opt>('/api/bitrix/users', on), [on]);
+  const fields = useLoad(list<{ code: string; title: string; type: string }>('/api/bitrix/deal-fields', on), [on]);
+  const uf = (fields.data?.items ?? []).filter((f) => f.code.startsWith('UF_'));
+  const fieldSelect = (k: 'meetingAtField' | 'meetingTypeField' | 'regionField', label: string) => (
+    <Field label={label}>
+      <select value={b[k]} onChange={(e) => setB({ [k]: e.target.value })}>
+        <option value="">— не заполнять —</option>
+        {b[k] && !uf.some((f) => f.code === b[k]) && <option value={b[k]}>{b[k]}</option>}
+        {uf.map((f) => <option key={f.code} value={f.code}>{f.title} ({f.code})</option>)}
+      </select>
+    </Field>
+  );
+  const multiStages = (k: 'stagesDone' | 'stagesFailed', label: string) => (
+    <Field label={label}>
+      <select multiple value={b[k]} onChange={(e) => setB({ [k]: [...e.target.selectedOptions].map((o) => o.value) })} style={{ minHeight: 90 }}>
+        {stages.data?.items.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+      </select>
+    </Field>
+  );
+  return (
+    <Section title="ОКЦ: обзвон базы и встречи" onSave={save} busy={busy}>
+      <div className="grid3">
+        {num('laterMinutes', '«Позвонить позднее» — снова в обзвоне через, минут')}
+        {num('pinDays', 'Закрепление карточки за оператором, дней')}
+        {num('reminderHours', 'Дело «Напомнить о встрече» — за, часов')}
+        {num('releaseLaterDays', 'Открепить «позвонить позднее», если оператор не входил, дней')}
+        {num('releaseAgreementDays', 'Открепить договорённости, дней без входа')}
+        {num('releaseFailedDays', 'Открепить несостоявшиеся встречи, дней без входа')}
+      </div>
+      <div className="label">Сделка ОКЦ в Битрикс24</div>
+      <div className="grid3">
+        <Field label="Воронка ОКЦ">
+          <select value={b.categoryId ?? ''} onChange={(e) => setB({ categoryId: e.target.value === '' ? null : Number(e.target.value), stageMeeting: '', stagesDone: [], stagesFailed: [] })}>
+            <option value="">Общая воронка</option>
+            {cats.data?.items.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Стадия «Встреча назначена»">
+          <select value={b.stageMeeting} onChange={(e) => setB({ stageMeeting: e.target.value })}>
+            <option value="">— первая стадия воронки —</option>
+            {stages.data?.items.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Ответственный за сделку">
+          <select value={b.assignedById ?? ''} onChange={(e) => setB({ assignedById: e.target.value ? Number(e.target.value) : null })}>
+            <option value="">Владелец вебхука</option>
+            {users.data?.items.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </Field>
+        {multiStages('stagesDone', 'Стадии «Встреча состоялась» — бонус оператору')}
+        {multiStages('stagesFailed', 'Стадии «Встреча не состоялась» — карточка снова в обзвоне')}
+        <Field label="Длительность встречи в календаре, минут"><input className="mono" value={b.meetingMinutes} onChange={(e) => setB({ meetingMinutes: Number(e.target.value.replace(/\D/g, '')) || 60 })} style={{ width: 120 }} /></Field>
+        {fieldSelect('meetingAtField', 'Поле «Дата и время встречи»')}
+        {fieldSelect('meetingTypeField', 'Поле «Тип встречи» (строка)')}
+        {fieldSelect('regionField', 'Поле «Город / область» (строка)')}
+      </div>
+      <p className="muted small" style={{ margin: 0 }}>Комментарий оператора записывается в поле «Комментарий» сделки. Клиент — новый контакт с именем и телефоном (или найденный по номеру).</p>
+      <CalendarPicker label="Календарь «Встречи ОП» — город и область" value={b.calendarOp} enabled={on} onChange={(c) => setB({ calendarOp: c })} />
+      <CalendarPicker label="Календарь «Встречи ОУП» — не Пермский край" value={b.calendarOup} enabled={on} onChange={(c) => setB({ calendarOup: c })} />
+      {data.env.bitrixOutgoing && <p className="muted small" style={{ margin: 0 }}>Чтобы итог встречи приходил сразу, добавьте в исходящий вебхук событие «Обновление сделки» (ONCRMDEALUPDATE). Без него стадии проверяются раз в 5 минут.</p>}
+    </Section>
+  );
+}
+
+function ReasonsSection() {
+  const toast = useToast();
+  const { data, reload } = useLoad(() => api<{ items: { id?: number; name: string; active: boolean }[] }>('/api/okc/reasons'), []);
+  const [items, setItems] = useState<{ id?: number; name: string; active: boolean }[] | null>(null);
+  useEffect(() => { if (data) setItems(data.items); }, [data]);
+  if (!items) return null;
+  const save = async () => {
+    try {
+      await api('/api/okc/reasons', { method: 'PUT', body: { items } });
+      toast('Причины отказа сохранены');
+      reload();
+    } catch (e) {
+      toast(errorText(e), true);
+    }
+  };
+  return (
+    <Section title="ОКЦ: причины отказа" onSave={save} busy={false}>
+      {items.map((r, i) => (
+        <div key={r.id ?? `n${i}`} className="row">
+          <input aria-label="Причина" value={r.name} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} style={{ maxWidth: 420 }} />
+          <label className="check"><input type="checkbox" checked={r.active} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, active: e.target.checked } : x)))} /><span>показывать</span></label>
+        </div>
+      ))}
+      <button className="btn sm" style={{ justifySelf: 'start' }} onClick={() => setItems([...items, { name: '', active: true }])}>Добавить причину</button>
+      <p className="muted small" style={{ margin: 0 }}>Ненужную причину лучше скрыть, а не удалять: она останется в истории старых карточек.</p>
     </Section>
   );
 }

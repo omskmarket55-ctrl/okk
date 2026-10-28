@@ -60,6 +60,17 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: 'ОКЦ — обзвон базы',
+    items: [
+      ['okc.work', 'Работать на обзвоне ОКЦ: статусы, карточки, встречи, свой бонус'],
+      ['okc.base', 'Загружать базу номеров и смотреть все карточки ОКЦ'],
+      ['okc.return', 'Возвращать в работу карточки с отказом'],
+      ['okc.reassign', 'Снимать карточки с оператора и отправлять в общую базу'],
+      ['okc.stats.all', 'Статистика ОКЦ по всем операторам'],
+      ['okc.payouts', 'Стоимость встреч и заявки на вывод бонуса'],
+    ],
+  },
+  {
     title: 'Администрирование',
     items: [
       ['users.manage', 'Управлять сотрудниками'],
@@ -87,6 +98,8 @@ export const DEFAULT_ROLES: { name: string; permissions: Permission[] }[] = [
     ],
   },
   { name: 'Оператор', permissions: ['queue.work', 'responses.own', 'reports.own', 'leads.create', 'sms.send'] },
+  { name: 'Оператор ОКЦ', permissions: ['okc.work'] },
+  { name: 'Супервайзер ОКЦ', permissions: ['okc.work', 'okc.base', 'okc.return', 'okc.reassign', 'okc.stats.all', 'recordings.all'] },
 ];
 
 /** Права сотрудника: права роли плюс добавленные минус убранные. */

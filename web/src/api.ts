@@ -29,5 +29,6 @@ export interface Me {
   name: string;
   roleName: string;
   permissions: string[];
+  pendingPayouts: number;
   integrations: { bitrix: boolean; uis: boolean; sms: { id: string; name: string }[] };
 }

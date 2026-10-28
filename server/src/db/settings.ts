@@ -59,6 +59,48 @@ export interface SmsSettings {
   allowEdit: boolean;
 }
 
+/** Календарь Битрикс24 для событий встреч: тип, владелец и раздел (calendar.section.get) */
+export interface CalendarTarget {
+  type: string;
+  ownerId: number;
+  sectionId: number | null;
+}
+
+/** ОКЦ: правила обзвона, бонусы и связь с воронкой ОКЦ в Битрикс24 */
+export interface OkcSettings {
+  /** Через сколько минут «позвонить позднее» карточка снова выдаётся */
+  laterMinutes: number;
+  /** На сколько дней карточка закрепляется за сотрудником */
+  pinDays: number;
+  /** Через сколько дней без входа в кабинет карточки открепляются: позвонить позднее, договорённость, встреча не состоялась */
+  releaseLaterDays: number;
+  releaseAgreementDays: number;
+  releaseFailedDays: number;
+  /** Дело «Напомнить о встрече»: за сколько часов до офисной встречи (если встреча завтра или позже) */
+  reminderHours: number;
+  /** Стоимость состоявшейся встречи, ₽ */
+  bonusOffice: number;
+  bonusDks: number;
+  bitrix: {
+    categoryId: number | null;
+    /** Стадия «Встреча назначена», в которую встаёт новая сделка */
+    stageMeeting: string;
+    /** Стадии «Встреча состоялась» и «Встреча не состоялась» */
+    stagesDone: string[];
+    stagesFailed: string[];
+    /** Ответственный за сделку ОКЦ (ID пользователя Битрикс24) */
+    assignedById: number | null;
+    /** Пользовательские поля сделки: дата и время встречи, тип, город/область (коды UF_CRM_…; пусто — не заполнять) */
+    meetingAtField: string;
+    meetingTypeField: string;
+    regionField: string;
+    /** Календари «Встречи ОП» (город и область) и «Встречи ОУП» (не Пермский край) */
+    calendarOp: CalendarTarget;
+    calendarOup: CalendarTarget;
+    meetingMinutes: number;
+  };
+}
+
 export interface SettingsMap {
   source: SourceSettings;
   cardFields: CardFieldsSettings;
@@ -66,6 +108,7 @@ export interface SettingsMap {
   queue: QueueSettings;
   uis: UisSettings;
   sms: SmsSettings;
+  okc: OkcSettings;
   /** Служебное: последнее обработанное дело и время синхронизации */
   syncState: { lastActivityId: number; lastRunAt: string | null; lastError: string | null; imported: number };
 }
@@ -88,6 +131,29 @@ export const DEFAULT_SETTINGS: SettingsMap = {
   queue: { callbackLeadMinutes: 15 },
   uis: { virtualNumber: '' },
   sms: { defaultProvider: null, providers: {}, templates: [], allowEdit: true },
+  okc: {
+    laterMinutes: 60,
+    pinDays: 30,
+    releaseLaterDays: 5,
+    releaseAgreementDays: 7,
+    releaseFailedDays: 10,
+    reminderHours: 3,
+    bonusOffice: 0,
+    bonusDks: 0,
+    bitrix: {
+      categoryId: null,
+      stageMeeting: '',
+      stagesDone: [],
+      stagesFailed: [],
+      assignedById: null,
+      meetingAtField: '',
+      meetingTypeField: '',
+      regionField: '',
+      calendarOp: { type: 'company_calendar', ownerId: 0, sectionId: null },
+      calendarOup: { type: 'company_calendar', ownerId: 0, sectionId: null },
+      meetingMinutes: 60,
+    },
+  },
   syncState: { lastActivityId: 0, lastRunAt: null, lastError: null, imported: 0 },
 };
 

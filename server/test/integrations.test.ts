@@ -127,3 +127,32 @@ describe('СМС и отчёты', () => {
     expect(b.find((q) => q.title === 'Что стоило сделать лучше')!.options[0]).toMatchObject({ label: 'Сроки', detractor: 1 });
   });
 });
+
+describe('ОКЦ: правила', async () => {
+  const { reminderDue, dayIn } = await import('../src/okc/time.js');
+  const { parsePhones } = await import('../src/okc/base.js');
+  const { buildMeetingDeal, calendarFor } = await import('../src/okc/bitrix.js');
+  const tz = 'Europe/Moscow';
+  const now = new Date('2026-10-28T09:00:00Z'); // 12:00 по Москве
+
+  it('напоминание: офисная встреча завтра и позже — за 3 часа, сегодня и ДКС — нет', () => {
+    expect(reminderDue(new Date('2026-10-29T12:00:00Z'), 'office', 3, tz, now)).toEqual(new Date('2026-10-29T09:00:00Z'));
+    expect(reminderDue(new Date('2026-10-28T15:00:00Z'), 'office', 3, tz, now)).toBeNull();
+    expect(reminderDue(new Date('2026-10-29T12:00:00Z'), 'dks', 3, tz, now)).toBeNull();
+    // Встреча завтра в 01:00 по Москве: напоминание за 3 часа попадает на сегодня 22:00
+    expect(reminderDue(new Date('2026-10-28T22:00:00Z'), 'office', 3, tz, now)).toEqual(new Date('2026-10-28T19:00:00Z'));
+    expect(dayIn(tz, new Date('2026-10-28T21:30:00Z'))).toBe('2026-10-29');
+  });
+
+  it('номера из файла', () => {
+    expect(parsePhones('Телефон;Имя\n+7 (913) 111-22-33;Иван\n891311122\n12')).toEqual({ phones: ['79131112233'], invalid: 2, total: 3 });
+  });
+
+  it('сделка встречи и выбор календаря', () => {
+    const s = { ...DEFAULT_SETTINGS.okc, bitrix: { ...DEFAULT_SETTINGS.okc.bitrix, categoryId: 7, stageMeeting: 'C7:NEW', regionField: 'UF_REGION' } };
+    const f = buildMeetingDeal(s, { clientName: 'Иван', phone: '+7913', comment: 'к', at: now, type: 'dks', region: 'outside', contactId: 5 }, 'Ольга');
+    expect(f).toMatchObject({ CATEGORY_ID: 7, STAGE_ID: 'C7:NEW', CONTACT_ID: 5, COMMENTS: 'к', UF_REGION: 'Не Пермский край' });
+    expect(calendarFor({ ...s, bitrix: { ...s.bitrix, calendarOup: { type: 'x', ownerId: 1, sectionId: 2 } } }, 'outside').sectionId).toBe(2);
+    expect(calendarFor(s, 'region')).toBe(s.bitrix.calendarOp);
+  });
+});

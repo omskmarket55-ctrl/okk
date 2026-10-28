@@ -27,7 +27,7 @@ services:
     environment:
       DATABASE_URL: postgres://okk:${POSTGRES_PASSWORD}@db:5432/okk
       PORT: 3000
-      TZ: Europe/Moscow
+      TZ: ${TZ:-Europe/Moscow}
     depends_on:
       db:
         condition: service_healthy

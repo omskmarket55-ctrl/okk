@@ -46,7 +46,7 @@ export function mergeSmsSettings(next: SmsSettings, prev: SmsSettings): SmsSetti
   };
 }
 
-const EDITABLE = ['source', 'cardFields', 'lead', 'queue', 'uis', 'sms'] as const;
+const EDITABLE = ['source', 'cardFields', 'lead', 'queue', 'uis', 'sms', 'okc'] as const;
 type EditableKey = (typeof EDITABLE)[number];
 
 export async function adminRoutes(app: FastifyInstance, ctx: AppContext) {
@@ -196,6 +196,28 @@ export async function adminRoutes(app: FastifyInstance, ctx: AppContext) {
     if (key === 'queue') {
       const m = Number((value as SettingsMap['queue']).callbackLeadMinutes);
       if (!Number.isInteger(m) || m < 0 || m > 240) throw new HttpError(400, 'bad_minutes', 'Минуты до перезвона — от 0 до 240');
+    }
+    if (key === 'okc') {
+      // Стоимость встреч меняется только через /api/okc/prices (право okc.payouts)
+      const prevOkc = prev as SettingsMap['okc'];
+      const v = value as SettingsMap['okc'];
+      const int = (n: unknown, min: number, max: number, name: string) => {
+        const x = Number(n);
+        if (!Number.isInteger(x) || x < min || x > max) throw new HttpError(400, 'bad_value', `${name}: целое число от ${min} до ${max}`);
+        return x;
+      };
+      value = {
+        ...v,
+        bonusOffice: prevOkc.bonusOffice,
+        bonusDks: prevOkc.bonusDks,
+        laterMinutes: int(v.laterMinutes, 5, 1440, 'Позвонить позднее, минут'),
+        pinDays: int(v.pinDays, 1, 365, 'Закрепление, дней'),
+        releaseLaterDays: int(v.releaseLaterDays, 1, 365, 'Открепление «позвонить позднее»'),
+        releaseAgreementDays: int(v.releaseAgreementDays, 1, 365, 'Открепление договорённостей'),
+        releaseFailedDays: int(v.releaseFailedDays, 1, 365, 'Открепление несостоявшихся встреч'),
+        reminderHours: int(v.reminderHours, 0, 72, 'Напоминание о встрече, часов'),
+        bitrix: { ...prevOkc.bitrix, ...v.bitrix, meetingMinutes: int(v.bitrix?.meetingMinutes ?? 60, 15, 600, 'Длительность встречи') },
+      };
     }
     if (key === 'source') {
       const s = value as SettingsMap['source'];
